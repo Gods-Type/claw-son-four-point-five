@@ -1,0 +1,24 @@
+# Dockerfile for Frontend service
+FROM node:18-alpine
+
+# Set working directory
+WORKDIR /app
+
+# Install dependencies
+COPY education/platform/frontend/package.json ./
+COPY education/platform/frontend/package-lock.json ./
+RUN npm ci
+
+# Copy source files
+COPY education/platform/frontend/src/ ./src/
+COPY education/platform/frontend/public/ ./public/
+COPY education/platform/frontend/next.config.js ./
+
+# Build the application
+RUN npm run build
+
+# Expose the port the app runs on
+EXPOSE 3000
+
+# Command to run the application
+CMD ["npm", "start"]

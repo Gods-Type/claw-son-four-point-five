@@ -1,0 +1,41 @@
+# Dockerfile for Worker service (Celery)
+FROM python:3.9-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
+ENV PIP_NO_CACHE_DIR=off
+ENV PIP_DISABLE_PIP_VERSION_CHECK=on
+ENV PIP_DEFAULT_TIMEOUT=100
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt && \
+    pip install -r requirements-dev.txt && \
+    pip install celery redis
+
+# Copy source code
+COPY education/platform/backend/src/ ./src/
+COPY education/content/ ./content/
+COPY education/assessment/ ./assessment/
+
+# Install the package in editable mode if needed
+# RUN pip install -e .
+
+# Expose the port the app runs on (Celery doesn't expose a port by default)
+# EXPOSE 5555
+
+# Command to run the application (this would be overridden by docker-compose)
+CMD ["celery", "-A", "src.main", "worker", "--loglevel=info"]

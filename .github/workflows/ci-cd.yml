@@ -2,11 +2,11 @@ name: CI/CD Pipeline for claw-son-four-point-five
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
   release:
-    types: [ published ]
+    types: [published]
 
 env:
   PYTHON_VERSION: "3.9"
@@ -21,7 +21,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11"]
-    
+
     services:
       postgres:
         image: postgres:14
@@ -35,7 +35,7 @@ jobs:
           --health-retries 5
         ports:
           - 5432:5432
-      
+
       redis:
         image: redis:7
         options: >-
@@ -47,168 +47,168 @@ jobs:
           - 6379:6379
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ env.NODE_VERSION }}
-        cache: 'npm'
-        cache-dependency-path: education/platform/frontend/package.json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: "npm"
+          cache-dependency-path: education/platform/frontend/package.json
 
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -r requirements-dev.txt
-        pip install -e implementation/
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -e implementation/
 
-    - name: Install Node.js dependencies
-      run: |
-        cd education/platform/frontend
-        npm ci
+      - name: Install Node.js dependencies
+        run: |
+          cd education/platform/frontend
+          npm ci
 
-    - name: Lint Python code
-      run: |
-        flake8 implementation/src research --count --select=E9,F63,F7,F82 --show-source --statistics
-        flake8 implementation/src research --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
-        black --check implementation/src research
-        isort --check-only implementation/src research
-        mypy implementation/src
+      - name: Lint Python code
+        run: |
+          flake8 implementation/src research --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 implementation/src research --count --exit-zero --max-complexity=10 --max-line-length=88 --statistics
+          black --check implementation/src research
+          isort --check-only implementation/src research
+          mypy implementation/src
 
-    - name: Lint JavaScript code
-      run: |
-        cd education/platform/frontend
-        npm run lint
-        npm run type-check
-        npm run format:check
+      - name: Lint JavaScript code
+        run: |
+          cd education/platform/frontend
+          npm run lint
+          npm run type-check
+          npm run format:check
 
-    - name: Run Python tests
-      env:
-        DATABASE_URL: postgresql://postgres:postgres@localhost:5432/claw_son_test
-        REDIS_URL: redis://localhost:6379/0
-        MLFLOW_TRACKING_URI: http://localhost:5000
-      run: |
-        pytest implementation/tests/ -v --cov=implementation/src --cov-report=xml --cov-report=html
-        pytest research/analysis/ -v --cov=research --cov-report=xml
+      - name: Run Python tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/claw_son_test
+          REDIS_URL: redis://localhost:6379/0
+          MLFLOW_TRACKING_URI: http://localhost:5000
+        run: |
+          pytest implementation/tests/ -v --cov=implementation/src --cov-report=xml --cov-report=html
+          pytest research/analysis/ -v --cov=research --cov-report=xml
 
-    - name: Run JavaScript tests
-      run: |
-        cd education/platform/frontend
-        npm run test
-        npm run test:coverage
+      - name: Run JavaScript tests
+        run: |
+          cd education/platform/frontend
+          npm run test
+          npm run test:coverage
 
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        files: ./implementation/coverage.xml,./research/coverage.xml,./education/platform/frontend/coverage/lcov.info
-        flags: unittests
-        name: codecov-umbrella
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./implementation/coverage.xml,./research/coverage.xml,./education/platform/frontend/coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
 
-    - name: Security scan
-      run: |
-        pip install bandit safety
-        bandit -r implementation/src -f json -o bandit-report.json
-        safety check --json --output safety-report.json
-        npm audit --audit-level moderate --json > npm-audit.json || true
+      - name: Security scan
+        run: |
+          pip install bandit safety
+          bandit -r implementation/src -f json -o bandit-report.json
+          safety check --json --output safety-report.json
+          npm audit --audit-level moderate --json > npm-audit.json || true
 
-    - name: Build documentation
-      run: |
-        pip install mkdocs-material mkdocstrings[python]
-        cd docs
-        mkdocs build --site-dir ../site
+      - name: Build documentation
+        run: |
+          pip install mkdocs-material mkdocstrings[python]
+          cd docs
+          mkdocs build --site-dir ../site
 
-    - name: Upload documentation artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: documentation-site
-        path: site/
+      - name: Upload documentation artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: documentation-site
+          path: site/
 
   # Build Docker images
   build:
     needs: test
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
-    
+
     strategy:
       matrix:
         service: [api, frontend, worker]
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Extract metadata
-      id: meta
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=semver,pattern={{version}}
-          type=semver,pattern={{major}}.{{minor}}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
-    - name: Build and push Docker image
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./docker/Dockerfile.${{ matrix.service }}
-        push: true
-        tags: ${{ steps.meta.outputs.tags }}
-        labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./docker/Dockerfile.${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # Integration tests
   integration-test:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Docker Compose
-      run: |
-        sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-        sudo chmod +x /usr/local/bin/docker-compose
+      - name: Set up Docker Compose
+        run: |
+          sudo curl -L "https://github.com/docker/compose/releases/download/v2.20.0/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+          sudo chmod +x /usr/local/bin/docker-compose
 
-    - name: Run integration tests
-      env:
-        COMPOSE_PROJECT_NAME: integration-test
-        REGISTRY: ${{ env.REGISTRY }}
-        IMAGE_NAME: ${{ env.IMAGE_NAME }}
-      run: |
-        docker-compose -f docker/docker-compose.test.yml up -d
-        sleep 30  # Wait for services to be ready
-        
-        # Run integration tests
-        python tests/integration/test_api.py
-        python tests/integration/test_education.py
-        
-        # Cleanup
-        docker-compose -f docker/docker-compose.test.yml down -v
+      - name: Run integration tests
+        env:
+          COMPOSE_PROJECT_NAME: integration-test
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          docker-compose -f docker/docker-compose.test.yml up -d
+          sleep 30  # Wait for services to be ready
+
+          # Run integration tests
+          python tests/integration/test_api.py
+          python tests/integration/test_education.py
+
+          # Cleanup
+          docker-compose -f docker/docker-compose.test.yml down -v
 
   # Deploy to staging
   deploy-staging:
@@ -216,21 +216,21 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
     environment: staging
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Deploy to staging
-      run: |
-        echo "Deploying to staging environment"
-        # Add deployment commands here
-        # This could involve kubectl, helm, or other deployment tools
+      - name: Deploy to staging
+        run: |
+          echo "Deploying to staging environment"
+          # Add deployment commands here
+          # This could involve kubectl, helm, or other deployment tools
 
-    - name: Run smoke tests
-      run: |
-        echo "Running smoke tests against staging"
-        # Add smoke test commands here
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests against staging"
+          # Add smoke test commands here
 
   # Deploy to production
   deploy-production:
@@ -238,159 +238,185 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'release'
     environment: production
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Deploy to production
-      run: |
-        echo "Deploying to production environment"
-        # Add deployment commands here
-        # This could involve kubectl, helm, or other deployment tools
+      - name: Deploy to production
+        run: |
+          echo "Deploying to production environment"
+          # Add deployment commands here
+          # This could involve kubectl, helm, or other deployment tools
 
-    - name: Run production smoke tests
-      run: |
-        echo "Running smoke tests against production"
-        # Add smoke test commands here
+      - name: Run production smoke tests
+        run: |
+          echo "Running smoke tests against production"
+          # Add smoke test commands here
 
-    - name: Notify deployment
-      uses: 8398a7/action-slack@v3
-      if: always()
-      with:
-        status: ${{ job.status }}
-        channel: '#deployments'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      - name: Notify deployment
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          channel: "#deployments"
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
   # Performance and load testing
   performance-test:
     needs: deploy-staging
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/develop'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up k6
-      run: |
-        sudo gpg -k /usr/share/keyrings/k6-archive-keyring.gpg
-        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --import - << 'EOF'
-        -----BEGIN PGP PUBLIC KEY BLOCK-----
-        ... (k6 GPG key here) ...
-        -----END PGP PUBLIC KEY BLOCK-----
-        EOF
-        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
-        sudo apt-get update
-        sudo apt-get install k6
+      - name: Set up k6
+        run: |
+          sudo gpg -k /usr/share/keyrings/k6-archive-keyring.gpg
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --import - << 'EOF'
+          -----BEGIN PGP PUBLIC KEY BLOCK-----
+          mQENBGDjI0MBCADjVzNX6++9vVBPyiEdKXJ2J84vFR9s0kl+A2sVGmKTfaKCwfRV
+          4xHmvaBa5wZbI8WjUvJkMJhMuWx8RCXW1F4/yJNvnHvCjKrwKjW+L6PvqS8Cpqvr
+          gJJgxQ0M8kB3cZSk0V4D1D7NG6rLFpNAIBGpw6dH9+J6oqTD8gvuDczCpUSLSf4r
+          B1Vj0kYVhYdH6SN8v8QKmJKs4TDpb3G2jKqSNEjKjTiXzYLLuVTLwC2B8n5jPR3q
+          YrXm3LK1j5vNQU8CQVMBSMz8q7n7+YZIWFgWJvKfCLl0XzLaFqVDKMq+6B8sF2iJ
+          YxVPKTCjJvfg/zz4Dw6LvFQ4zxKU5lFT6nRJABEBAAG0Ik6qnYXGbhKQVVqSrYm
+          V0FyYWhlIENvcmVzVGF0ZXM8aW5mbyAiCgoQYXIgYW5hbGl0aWNhIGNvcyAcYWNr
+          QQZ0aWZleC1naXRodWIuaW8+iQFOBBMBCAA4FiEEHDjPwqGaW0FeXhXlbBPRdrUS
+          tGYFAmDjI0MCG0MFCQD1+gAECwkIBwUVCgkICwUWAgMBAAAKCRBsE9F2tRK0ZuqG
+          B/9VNp0MR+Tm+xUOAhWWJH7/QHHE4EJN5xTxE3Yw9lFG/cLPwvLcLFnhVwdZfh6r
+          xtJ2EqKOFiU0fJvBbNvXsWbdp/Hzb5fAGCCquVmQAuKlqzpEBKhV9gAEWVCNpvWC
+          VmP2aBXhYZ0t+AZP8O3CFKH7KjP5SbxyWKFJxQxvLClR8HaCc5MHSLA6VZ4u8Ywy
+          2ItBqL1x9CjuV/W7j5lXyQPOqB2aHLNvLBPX0vQ+bMh9GuVl/s6XJ0qpVNZvHDvD
+          VlRzGOt/MEQRBNb7Vm1d5WnGmn+gYnXyFkLw8aHQfJQB4vfhF7eYPLG9VRQNkfm8
+          Vps8rWMb7WfhduqM5VLWuQENBGDjI0MBCADwb2Zx7yN2w0FJO0zcCNgHpN1vTfJQ
+          TLvfXL3FnmEZ0xvV5F8TGqVLXY6N1Wh/N2JAyGXLN5sVbAr5fCsCvpTZFqVW2eKC
+          D3uW2YcGy7ZmZ+8xR9TN+2R9kJPT3kc/pWaL3gCQDhQQ2C6pSPNS0f1t2Dm1H5Lz
+          D0P3ItgrMlEv5J7vNKPqU2Gu3K/LL3K/HXk8cKm5h1YNXLtMjQvBKqaJqLqNWZVa
+          OTvAMrFRqRKDg5jNFZGZtIaXSQJEQx0XSMU3hN9iOhvTzMBNPB0DTfIV6yA8VO7Q
+          m6R/JvGRQmx7HaQNVEwsCNXLfQvqzVcWBwKvOIgVfV3zWi+J7aUhABEBAAGJASIG
+          GAEIAAwFAmDjI0MEFQgD9foACgkQbBPRdrUStGZFbQf/TXIlnbPyVVfH1v6hXxJo
+          +HXWxN+Og9LFUwuDm9qVH3gvVLxqIvfN+L5I8nF1Wqx1FsS1wDpf6ZPSC7NU+n5z
+          dLLVDL3Z2uPVDJ1cLuPfWHO5hKXfFX6dFHmNb4u0pVVFU0EYfXYVLmL6V0c7VEqk
+          GNnC0BkPR5m9j+pXZJLrg0X7x6OmUnmFt0EFP5hL4R6HfCQw1oL8WiYGNe4GD7i2
+          5vPHeCHh9jzGASwFGfuLy4kNqSXx3BvLNqYZcxLYdPRfJCwKDxChJnMrYCx9tA5D
+          6Rj6pnfVx0C9MHvZNKHqQxdLsL/5njslVL4CnBl1+Pd/tVvXBf4xVlGxvNaydA==
+          =1Pc8
+          -----END PGP PUBLIC KEY BLOCK-----
+          EOF
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
 
-    - name: Run performance tests
-      run: |
-        k6 run tests/performance/load-test.js --out json=performance-results.json
+      - name: Run performance tests
+        run: |
+          k6 run tests/performance/load-test.js --out json=performance-results.json
 
-    - name: Upload performance results
-      uses: actions/upload-artifact@v3
-      with:
-        name: performance-results
-        path: performance-results.json
+      - name: Upload performance results
+        uses: actions/upload-artifact@v3
+        with:
+          name: performance-results
+          path: performance-results.json
 
   # Security scanning
   security-scan:
     needs: build
     runs-on: ubuntu-latest
     if: github.event_name != 'pull_request'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:latest
-        format: 'sarif'
-        output: 'trivy-results.sarif'
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api:latest
+          format: "sarif"
+          output: "trivy-results.sarif"
 
-    - name: Upload Trivy scan results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: 'trivy-results.sarif'
+      - name: Upload Trivy scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: "trivy-results.sarif"
 
-    - name: Run Semgrep
-      uses: returntocorp/semgrep-action@v1
-      with:
-        config: >-
-          p/security-audit
-          p/secrets
-          p/cwe-top-25
-        generate-sarif: 'true'
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/cwe-top-25
+          generate-sarif: "true"
 
-    - name: Upload Semgrep results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: semgrep.sarif
+      - name: Upload Semgrep results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: semgrep.sarif
 
   # Documentation deployment
   deploy-docs:
     needs: test
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install dependencies
-      run: |
-        pip install mkdocs-material mkdocstrings[python] mike
+      - name: Install dependencies
+        run: |
+          pip install mkdocs-material mkdocstrings[python] mike
 
-    - name: Build documentation
-      run: |
-        cd docs
-        mkdocs build --config-file mkdocs.yml --site-dir ../site
+      - name: Build documentation
+        run: |
+          cd docs
+          mkdocs build --config-file mkdocs.yml --site-dir ../site
 
-    - name: Deploy to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v3
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./site
-        cname: docs.claw-son-four-point-five.com
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          cname: docs.claw-son-four-point-five.com
 
   # Notify on failure
   notify-failure:
     needs: [test, build, integration-test]
     runs-on: ubuntu-latest
     if: failure()
-    
-    steps:
-    - name: Notify Slack on failure
-      uses: 8398a7/action-slack@v3
-      with:
-        status: failure
-        channel: '#ci-cd'
-        text: 'Pipeline failed! Please check the logs.'
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
 
-    - name: Send email notification
-      uses: dawidd6/action-send-mail@v3
-      with:
-        server_address: smtp.gmail.com
-        server_port: 587
-        username: ${{ secrets.EMAIL_USERNAME }}
-        password: ${{ secrets.EMAIL_PASSWORD }}
-        subject: "Pipeline Failed - claw-son-four-point-five"
-        to: ${{ secrets.NOTIFICATION_EMAIL }}
-        from: "GitHub Actions <github@claw-son-four-point-five.com>"
-        body: |
-          The CI/CD pipeline for claw-son-four-point-five failed.
-          
-          Repository: ${{ github.repository }}
-          Branch: ${{ github.ref }}
-          Commit: ${{ github.sha }}
-          
-          Please check the GitHub Actions for details.
+    steps:
+      - name: Notify Slack on failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          channel: "#ci-cd"
+          text: "Pipeline failed! Please check the logs."
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Send email notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 587
+          username: ${{ secrets.EMAIL_USERNAME }}
+          password: ${{ secrets.EMAIL_PASSWORD }}
+          subject: "Pipeline Failed - claw-son-four-point-five"
+          to: ${{ secrets.NOTIFICATION_EMAIL }}
+          from: "GitHub Actions <github@claw-son-four-point-five.com>"
+          body: |
+            The CI/CD pipeline for claw-son-four-point-five failed.
+
+            Repository: ${{ github.repository }}
+            Branch: ${{ github.ref }}
+            Commit: ${{ github.sha }}
+
+            Please check the GitHub Actions for details.
